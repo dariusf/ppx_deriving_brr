@@ -2,7 +2,7 @@
 # ppx_deriving_brr
 
 1. Derives [conversion functions](https://erratique.ch/software/brr/doc/ffi_cookbook.html#iface_class) to and from Brr's [Jv](https://erratique.ch/software/brr/doc/Jv/index.html) and user-defined OCaml types
-2. Derives a [ctypes-like](https://github.com/dbuenzli/brr/issues/16) FFI module which uses these functions to [expose OCaml functions to JS](https://erratique.ch/software/brr/doc/ffi_cookbook.html#export)
+2. Derives an FFI module from a [ctypes-like](https://github.com/dbuenzli/brr/issues/16) specification which uses the above conversions to [expose OCaml functions to JS](https://erratique.ch/software/brr/doc/ffi_cookbook.html#export)
 
 The use case is writing OCaml libraries which can be called from JS, where values created on both the JS and OCaml sides are passed back and forth.
 

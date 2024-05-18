@@ -32,8 +32,59 @@ include
     let jv_of_r { x; y } = Jv.obj [|("x", (jv_of_v x));("y", (Jv.of_int y))|]
     let _ = jv_of_r
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
+type 'a t =
+  | Nil 
+  | Cons of 'a * 'a t [@@deriving brr]
+include
+  struct
+    let _ = fun (_ : 'a t) -> ()
+    let rec jv_of_t jv_of_a t =
+      match t with
+      | Nil ->
+          let a = Jv.Jarray.create 1 in
+          (Jv.Jarray.set a 0 (Jv.of_string "Nil"); (); a)
+      | Cons (v0, v1) ->
+          let a = Jv.Jarray.create 3 in
+          (Jv.Jarray.set a 0 (Jv.of_string "Cons");
+           (Jv.Jarray.set a 1 (jv_of_a v0);
+            Jv.Jarray.set a 2 ((jv_of_t jv_of_a) v1));
+           a)
+    let _ = jv_of_t
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
+type s1 =
+  | S1 of int t [@@deriving brr]
+include
+  struct
+    let _ = fun (_ : s1) -> ()
+    let jv_of_s1 t =
+      match t with
+      | S1 v0 ->
+          let a = Jv.Jarray.create 2 in
+          (Jv.Jarray.set a 0 (Jv.of_string "S1");
+           Jv.Jarray.set a 1 ((jv_of_t Jv.of_int) v0);
+           a)
+    let _ = jv_of_s1
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
+type 'a s =
+  | S of 'a t [@@deriving brr]
+include
+  struct
+    let _ = fun (_ : 'a s) -> ()
+    let jv_of_s jv_of_a t =
+      match t with
+      | S v0 ->
+          let a = Jv.Jarray.create 2 in
+          (Jv.Jarray.set a 0 (Jv.of_string "S");
+           Jv.Jarray.set a 1 ((jv_of_t jv_of_a) v0);
+           a)
+    let _ = jv_of_s
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
 let () =
-  Brr.Console.log
-    [jv_of_r { x = (A ("hi", false)); y = 2 };
-    jv_of_r { x = (B 1.); y = 3 };
-    jv_of_r { x = C; y = 4 }]
+  let p x = Brr.Console.log [x] in
+  p (jv_of_r { x = (A ("hi", false)); y = 2 });
+  p (jv_of_r { x = (B 1.); y = 3 });
+  p (jv_of_r { x = C; y = 4 });
+  (let xs = Cons (1, Nil) in
+   p (jv_of_t Jv.of_int xs);
+   p (jv_of_s1 (S1 xs));
+   p (jv_of_s Jv.of_int (S xs)))
