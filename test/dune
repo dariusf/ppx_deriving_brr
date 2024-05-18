@@ -1,0 +1,36 @@
+; generates ppx result
+
+(rule
+ (targets pp.result)
+ (deps test.ml)
+ (action
+  (run ./pp/pp.exe --impl %{deps} -o %{targets})))
+
+; checks ppx result, enables promotion
+
+(rule
+ (alias runtest)
+ (action
+  (diff pp.expected pp.result)))
+
+; compiles and executes the test program, then compares the result
+
+(executable
+ (name test)
+ (libraries brr)
+ (modes js)
+ (preprocess (pps ppx_deriving_brr)))
+
+(rule
+ (target run.result)
+ (deps test.bc.js)
+ (action
+  (with-stdout-to %{target}
+    (run node %{deps}))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff run.expected run.result)))
+
+(env (dev (flags (:standard -warn-error -A))))

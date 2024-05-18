@@ -1,0 +1,39 @@
+type v =
+  | A of string * bool 
+  | B of float 
+  | C [@@deriving brr]
+include
+  struct
+    let _ = fun (_ : v) -> ()
+    let jv_of_v t =
+      match t with
+      | A (v0, v1) ->
+          let a = Jv.Jarray.create 3 in
+          (Jv.Jarray.set a 0 (Jv.of_string "A");
+           (Jv.Jarray.set a 1 (Jv.of_string v0);
+            Jv.Jarray.set a 2 (Jv.of_bool v1));
+           a)
+      | B v0 ->
+          let a = Jv.Jarray.create 2 in
+          (Jv.Jarray.set a 0 (Jv.of_string "B");
+           Jv.Jarray.set a 1 (Jv.of_float v0);
+           a)
+      | C ->
+          let a = Jv.Jarray.create 1 in
+          (Jv.Jarray.set a 0 (Jv.of_string "C"); (); a)
+    let _ = jv_of_v
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
+type r = {
+  x: v ;
+  y: int }[@@deriving brr]
+include
+  struct
+    let _ = fun (_ : r) -> ()
+    let jv_of_r { x; y } = Jv.obj [|("x", (jv_of_v x));("y", (Jv.of_int y))|]
+    let _ = jv_of_r
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
+let () =
+  Brr.Console.log
+    [jv_of_r { x = (A ("hi", false)); y = 2 };
+    jv_of_r { x = (B 1.); y = 3 };
+    jv_of_r { x = C; y = 4 }]

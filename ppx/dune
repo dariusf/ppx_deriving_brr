@@ -1,0 +1,12 @@
+(library
+ (name ppx_deriving_brr)
+ (public_name ppx_deriving_brr)
+ (libraries ppxlib)
+ (preprocess
+  (pps ppxlib.metaquot))
+ (kind ppx_deriver))
+
+(env
+ (dev
+  (flags
+   (:standard -warn-error -A))))
