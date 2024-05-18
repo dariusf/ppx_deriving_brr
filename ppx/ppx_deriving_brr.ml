@@ -1,17 +1,8 @@
-let rec unsnoc xs =
-  match xs with
-  | [] -> failwith "unsnoc"
-  | [x] -> ([], x)
-  | x :: xs ->
-    let xs1, last = unsnoc xs in
-    (x :: xs1, last)
-
-let foldr1 f xs =
+let rec foldr1 f xs =
   match xs with
   | [] -> failwith "foldr1"
-  | _ ->
-    let xs, last = unsnoc xs in
-    List.fold_right f xs last
+  | [x] -> x
+  | y :: ys -> f y (foldr1 f ys)
 
 open Ppxlib
 module Ast = Ast_builder.Default
