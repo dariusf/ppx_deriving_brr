@@ -25,7 +25,7 @@ and show_v : v -> Ppx_deriving_runtime.string =
 include
   struct
     let _ = fun (_ : v) -> ()
-    let jv_of_v t =
+    let v_to_jv t =
       match t with
       | A (v0, v1) ->
           let a = Jv.Jarray.create 3 in
@@ -41,8 +41,8 @@ include
       | C ->
           let a = Jv.Jarray.create 1 in
           (Jv.Jarray.set a 0 (Jv.of_string "C"); (); a)
-    let _ = jv_of_v
-    let jv_to_v t =
+    let _ = v_to_jv
+    let v_of_jv t =
       ((match Jv.to_string (Jv.Jarray.get t 0) with
         | "A" ->
             A
@@ -51,7 +51,7 @@ include
         | "B" -> B (Jv.to_float (Jv.Jarray.get t 1))
         | "C" -> C)
       [@warning "-8"])
-    let _ = jv_to_v
+    let _ = v_of_jv
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type r = {
   x: v ;
@@ -78,11 +78,11 @@ and show_r : r -> Ppx_deriving_runtime.string =
 include
   struct
     let _ = fun (_ : r) -> ()
-    let jv_of_r { x; y } = Jv.obj [|("x", (jv_of_v x));("y", (Jv.of_int y))|]
-    let _ = jv_of_r
-    let jv_to_r j =
-      { x = (jv_to_v (Jv.get j "x")); y = (Jv.to_int (Jv.get j "y")) }
-    let _ = jv_to_r
+    let r_to_jv { x; y } = Jv.obj [|("x", (v_to_jv x));("y", (Jv.of_int y))|]
+    let _ = r_to_jv
+    let r_of_jv j =
+      { x = (v_of_jv (Jv.get j "x")); y = (Jv.to_int (Jv.get j "y")) }
+    let _ = r_of_jv
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type 'a t =
   | Nil 
@@ -118,7 +118,7 @@ and show :
 include
   struct
     let _ = fun (_ : 'a t) -> ()
-    let rec jv_of_t jv_of_a t =
+    let rec t_to_jv a_to_jv t =
       match t with
       | Nil ->
           let a = Jv.Jarray.create 1 in
@@ -126,68 +126,68 @@ include
       | Cons (v0, v1) ->
           let a = Jv.Jarray.create 3 in
           (Jv.Jarray.set a 0 (Jv.of_string "Cons");
-           (Jv.Jarray.set a 1 (jv_of_a v0);
-            Jv.Jarray.set a 2 ((jv_of_t jv_of_a) v1));
+           (Jv.Jarray.set a 1 (a_to_jv v0);
+            Jv.Jarray.set a 2 ((t_to_jv a_to_jv) v1));
            a)
-    let _ = jv_of_t
-    let rec jv_to_t jv_to_a t =
+    let _ = t_to_jv
+    let rec t_of_jv a_of_jv t =
       ((match Jv.to_string (Jv.Jarray.get t 0) with
         | "Nil" -> Nil
         | "Cons" ->
             Cons
-              ((jv_to_a (Jv.Jarray.get t 1)),
-                (jv_to_t jv_to_a (Jv.Jarray.get t 2))))
+              ((a_of_jv (Jv.Jarray.get t 1)),
+                (t_of_jv a_of_jv (Jv.Jarray.get t 2))))
       [@warning "-8"])
-    let _ = jv_to_t
+    let _ = t_of_jv
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type s1 =
   | S1 of int t [@@deriving brr]
 include
   struct
     let _ = fun (_ : s1) -> ()
-    let jv_of_s1 t =
+    let s1_to_jv t =
       match t with
       | S1 v0 ->
           let a = Jv.Jarray.create 2 in
           (Jv.Jarray.set a 0 (Jv.of_string "S1");
-           Jv.Jarray.set a 1 ((jv_of_t Jv.of_int) v0);
+           Jv.Jarray.set a 1 ((t_to_jv Jv.of_int) v0);
            a)
-    let _ = jv_of_s1
-    let jv_to_s1 t =
+    let _ = s1_to_jv
+    let s1_of_jv t =
       ((match Jv.to_string (Jv.Jarray.get t 0) with
-        | "S1" -> S1 (jv_to_t Jv.to_int (Jv.Jarray.get t 1)))
+        | "S1" -> S1 (t_of_jv Jv.to_int (Jv.Jarray.get t 1)))
       [@warning "-8"])
-    let _ = jv_to_s1
+    let _ = s1_of_jv
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type 'a s =
   | S of 'a t [@@deriving brr]
 include
   struct
     let _ = fun (_ : 'a s) -> ()
-    let jv_of_s jv_of_a t =
+    let s_to_jv a_to_jv t =
       match t with
       | S v0 ->
           let a = Jv.Jarray.create 2 in
           (Jv.Jarray.set a 0 (Jv.of_string "S");
-           Jv.Jarray.set a 1 ((jv_of_t jv_of_a) v0);
+           Jv.Jarray.set a 1 ((t_to_jv a_to_jv) v0);
            a)
-    let _ = jv_of_s
-    let jv_to_s jv_to_a t =
+    let _ = s_to_jv
+    let s_of_jv a_of_jv t =
       ((match Jv.to_string (Jv.Jarray.get t 0) with
-        | "S" -> S (jv_to_t jv_to_a (Jv.Jarray.get t 1)))
+        | "S" -> S (t_of_jv a_of_jv (Jv.Jarray.get t 1)))
       [@warning "-8"])
-    let _ = jv_to_s
+    let _ = s_of_jv
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 let () =
   let p x = Brr.Console.log [x] in
   let data = { x = (A ("hi", false)); y = 2 } in
-  p (jv_of_r data);
-  p (jv_of_r { x = (B 1.); y = 3 });
-  p (jv_of_r { x = C; y = 4 });
+  p (r_to_jv data);
+  p (r_to_jv { x = (B 1.); y = 3 });
+  p (r_to_jv { x = C; y = 4 });
   (let xs = Cons (1, Nil) in
-   p (jv_of_t Jv.of_int xs);
-   p (jv_of_s1 (S1 xs));
-   p (jv_of_s Jv.of_int (S xs));
-   (let rt = jv_to_t Jv.to_int (jv_of_t Jv.of_int xs) in
+   p (t_to_jv Jv.of_int xs);
+   p (s1_to_jv (S1 xs));
+   p (s_to_jv Jv.of_int (S xs));
+   (let rt = t_of_jv Jv.to_int (t_to_jv Jv.of_int xs) in
     Format.printf "%a@." (pp Format.pp_print_int) rt;
-    (let rt1 = jv_to_r (jv_of_r data) in Format.printf "%a@." pp_r rt1)))
+    (let rt1 = r_of_jv (r_to_jv data) in Format.printf "%a@." pp_r rt1)))

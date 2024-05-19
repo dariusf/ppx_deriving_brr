@@ -20,20 +20,20 @@ let error_str ~loc msg = [%str [%ocaml.error [%e Ast.estring ~loc msg]]]
 let rec jv_conversion_for loc dir (typ : core_type) =
   let templ =
     match dir with
-    | `Of -> Format.asprintf "jv_of_%s"
-    | `To -> Format.asprintf "jv_to_%s"
+    | `ToJv -> Format.asprintf "%s_to_jv"
+    | `OfJv -> Format.asprintf "%s_of_jv"
   in
   match typ.ptyp_desc with
   | Ptyp_constr ({ txt = Lident name; loc = _ }, args) ->
     (match (name, args, dir) with
-    | "int", [], `Of -> [%expr Jv.of_int]
-    | "int", [], `To -> [%expr Jv.to_int]
-    | "string", [], `Of -> [%expr Jv.of_string]
-    | "string", [], `To -> [%expr Jv.to_string]
-    | "float", [], `Of -> [%expr Jv.of_float]
-    | "float", [], `To -> [%expr Jv.to_float]
-    | "bool", [], `Of -> [%expr Jv.of_bool]
-    | "bool", [], `To -> [%expr Jv.to_bool]
+    | "int", [], `ToJv -> [%expr Jv.of_int]
+    | "int", [], `OfJv -> [%expr Jv.to_int]
+    | "string", [], `ToJv -> [%expr Jv.of_string]
+    | "string", [], `OfJv -> [%expr Jv.to_string]
+    | "float", [], `ToJv -> [%expr Jv.of_float]
+    | "float", [], `OfJv -> [%expr Jv.to_float]
+    | "bool", [], `ToJv -> [%expr Jv.of_bool]
+    | "bool", [], `OfJv -> [%expr Jv.to_bool]
     | _ ->
       let fn = Ast.evar ~loc (templ name) in
       let args =
@@ -97,8 +97,8 @@ let make_binding_with_params loc is_rec name type_params templ final_fn_body =
 let generate_record loc is_rec type_params name fields =
   let generate_of () =
     (*
-      let jv_of_a {f1} =
-        Jv.obj [| "f1", jv_of_f1t f1 |]
+      let a_to_jv {f1} =
+        Jv.obj [| "f1", f1t_to_jv f1 |]
     *)
     let param =
       Ast.ppat_record ~loc
@@ -122,19 +122,19 @@ let generate_record loc is_rec type_params name fields =
                      [
                        Ast.estring ~loc name;
                        [%expr
-                         [%e jv_conversion_for loc `Of f.pld_type] [%e arg]];
+                         [%e jv_conversion_for loc `ToJv f.pld_type] [%e arg]];
                      ])
                  fields)]]
     in
     (* the function which takes the value to be converted *)
     let final_fn_body = Ast.pexp_fun ~loc Nolabel None param body in
     make_binding_with_params loc is_rec name type_params
-      (Format.asprintf "jv_of_%s")
+      (Format.asprintf "%s_to_jv")
       final_fn_body
   in
   let generate_to () =
     (*
-      let jv_to_a t =
+      let a_of_jv t =
         { f1=jv_to_f1t (Jv.get t "f1") }
     *)
     let param = Ast.pvar ~loc "j" in
@@ -146,7 +146,7 @@ let generate_record loc is_rec type_params name fields =
              let typ = f.pld_type in
              ( lident ~loc name,
                Ast.pexp_apply ~loc
-                 (jv_conversion_for loc `To typ)
+                 (jv_conversion_for loc `OfJv typ)
                  [(Nolabel, [%expr Jv.get j [%e Ast.estring ~loc name]])] ))
            fields)
         None
@@ -154,7 +154,7 @@ let generate_record loc is_rec type_params name fields =
     (* the function which takes the value to be converted *)
     let final_fn_body = Ast.pexp_fun ~loc Nolabel None param body in
     make_binding_with_params loc is_rec name type_params
-      (Format.asprintf "jv_to_%s")
+      (Format.asprintf "%s_of_jv")
       final_fn_body
   in
   [generate_of (); generate_to ()]
@@ -193,7 +193,7 @@ let generate_variant loc is_rec type_params name cases =
                      (fun i typ ->
                        let v =
                          [%expr
-                           [%e jv_conversion_for loc `Of typ]
+                           [%e jv_conversion_for loc `ToJv typ]
                              [%e Ast.evar ~loc (Format.asprintf "v%d" i)]]
                        in
                        let idx = Ast.eint ~loc (i + 1) in
@@ -225,7 +225,7 @@ let generate_variant loc is_rec type_params name cases =
     (* final function which acts on thing to be converted *)
     let of_final_fn = Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body in
     make_binding_with_params loc is_rec name type_params
-      (Format.asprintf "jv_of_%s")
+      (Format.asprintf "%s_to_jv")
       of_final_fn
   in
   (*
@@ -246,7 +246,7 @@ let generate_variant loc is_rec type_params name cases =
                  List.mapi
                    (fun i ta ->
                      Ast.pexp_apply ~loc
-                       (jv_conversion_for loc `To ta)
+                       (jv_conversion_for loc `OfJv ta)
                        [
                          ( Nolabel,
                            [%expr Jv.Jarray.get t [%e Ast.eint ~loc (i + 1)]] );
@@ -280,7 +280,7 @@ let generate_variant loc is_rec type_params name cases =
     (* final function which acts on thing to be converted *)
     let of_final_fn = Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body in
     make_binding_with_params loc is_rec name type_params
-      (Format.asprintf "jv_to_%s")
+      (Format.asprintf "%s_of_jv")
       of_final_fn
   in
   [generate_of (); generate_to ()]
