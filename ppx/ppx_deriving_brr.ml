@@ -35,7 +35,11 @@ let rec jv_conversion_for loc dir (typ : core_type) =
     | "bool", [], `ToJv -> [%expr Jv.of_bool]
     | "bool", [], `OfJv -> [%expr Jv.to_bool]
     | _ ->
-      let fn = Ast.evar ~loc (templ name) in
+      let fn =
+        if String.equal name "t" then
+          Ast.evar ~loc (match dir with `ToJv -> "to_jv" | `OfJv -> "of_jv")
+        else Ast.evar ~loc (templ name)
+      in
       let args =
         List.map (jv_conversion_for loc dir) args
         |> List.map (fun a -> (Nolabel, a))
@@ -129,7 +133,8 @@ let generate_record loc is_rec type_params name fields =
     (* the function which takes the value to be converted *)
     let final_fn_body = Ast.pexp_fun ~loc Nolabel None param body in
     make_binding_with_params loc is_rec name type_params
-      (Format.asprintf "%s_to_jv")
+      (fun t ->
+        match t with "t" -> "to_jv" | _ -> Format.asprintf "%s_to_jv" t)
       final_fn_body
   in
   let generate_to () =
@@ -154,7 +159,8 @@ let generate_record loc is_rec type_params name fields =
     (* the function which takes the value to be converted *)
     let final_fn_body = Ast.pexp_fun ~loc Nolabel None param body in
     make_binding_with_params loc is_rec name type_params
-      (Format.asprintf "%s_of_jv")
+      (fun t ->
+        match t with "t" -> "of_jv" | _ -> Format.asprintf "%s_of_jv" t)
       final_fn_body
   in
   [generate_of (); generate_to ()]
@@ -225,7 +231,8 @@ let generate_variant loc is_rec type_params name cases =
     (* final function which acts on thing to be converted *)
     let of_final_fn = Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body in
     make_binding_with_params loc is_rec name type_params
-      (Format.asprintf "%s_to_jv")
+      (fun t ->
+        match t with "t" -> "to_jv" | _ -> Format.asprintf "%s_to_jv" t)
       of_final_fn
   in
   (*
@@ -280,7 +287,8 @@ let generate_variant loc is_rec type_params name cases =
     (* final function which acts on thing to be converted *)
     let of_final_fn = Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body in
     make_binding_with_params loc is_rec name type_params
-      (Format.asprintf "%s_of_jv")
+      (fun t ->
+        match t with "t" -> "of_jv" | _ -> Format.asprintf "%s_of_jv" t)
       of_final_fn
   in
   [generate_of (); generate_to ()]

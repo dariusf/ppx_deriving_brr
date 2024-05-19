@@ -24,6 +24,8 @@ This can be used as follows.
 let a = 1;
 ```
 
+If the type is named `t`, the prefix is dropped. The resulting functions are suitable for implementing [Jv.CONV](https://erratique.ch/software/brr/doc/Jv/module-type-CONV/index.html).
+
 ## Conversion Scheme
 
 Uses [Jv's conversion functions](https://erratique.ch/software/brr/doc/Jv/index.html) if possible.

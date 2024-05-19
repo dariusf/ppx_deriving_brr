@@ -25,10 +25,10 @@ let () =
   p (r_to_jv { x = B 1.; y = 3 });
   p (r_to_jv { x = C; y = 4 });
   let xs = Cons (1, Nil) in
-  p (t_to_jv Jv.of_int xs);
+  p (to_jv Jv.of_int xs);
   p (s1_to_jv (S1 xs));
   p (s_to_jv Jv.of_int (S xs));
-  let rt = t_of_jv Jv.to_int (t_to_jv Jv.of_int xs) in
+  let rt = of_jv Jv.to_int (to_jv Jv.of_int xs) in
   Format.printf "%a@." (pp Format.pp_print_int) rt;
   let rt1 = r_of_jv (r_to_jv data) in
   Format.printf "%a@." pp_r rt1
