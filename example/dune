@@ -4,6 +4,6 @@
  (libraries brr)
  (modes js)
  (preprocess
-  (pps ppx_deriving_brr)))
+  (pps ppx_deriving.std ppx_deriving_brr)))
 
 (env (dev (flags (:standard -warn-error -A))))

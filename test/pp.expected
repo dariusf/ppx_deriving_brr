@@ -1,7 +1,27 @@
 type v =
   | A of string * bool 
   | B of float 
-  | C [@@deriving brr]
+  | C [@@deriving (brr, (show { with_path = false }))]
+let rec pp_v
+  : Ppx_deriving_runtime.Format.formatter -> v -> Ppx_deriving_runtime.unit =
+  ((let open! ((Ppx_deriving_runtime)[@ocaml.warning "-A"]) in
+      fun fmt ->
+        function
+        | A (a0, a1) ->
+            (Ppx_deriving_runtime.Format.fprintf fmt "(@[<2>A (@,";
+             ((Ppx_deriving_runtime.Format.fprintf fmt "%S") a0;
+              Ppx_deriving_runtime.Format.fprintf fmt ",@ ";
+              (Ppx_deriving_runtime.Format.fprintf fmt "%B") a1);
+             Ppx_deriving_runtime.Format.fprintf fmt "@,))@]")
+        | B a0 ->
+            (Ppx_deriving_runtime.Format.fprintf fmt "(@[<2>B@ ";
+             (Ppx_deriving_runtime.Format.fprintf fmt "%F") a0;
+             Ppx_deriving_runtime.Format.fprintf fmt "@])")
+        | C -> Ppx_deriving_runtime.Format.pp_print_string fmt "C")
+  [@ocaml.warning "-A"])
+and show_v : v -> Ppx_deriving_runtime.string =
+  fun x -> Ppx_deriving_runtime.Format.asprintf "%a" pp_v x[@@ocaml.warning
+                                                             "-32"]
 include
   struct
     let _ = fun (_ : v) -> ()
@@ -22,19 +42,79 @@ include
           let a = Jv.Jarray.create 1 in
           (Jv.Jarray.set a 0 (Jv.of_string "C"); (); a)
     let _ = jv_of_v
+    let jv_to_v t =
+      ((match Jv.to_string (Jv.Jarray.get t 0) with
+        | "A" ->
+            A
+              ((Jv.to_string (Jv.Jarray.get t 1)),
+                (Jv.to_bool (Jv.Jarray.get t 2)))
+        | "B" -> B (Jv.to_float (Jv.Jarray.get t 1))
+        | "C" -> C)
+      [@warning "-8"])
+    let _ = jv_to_v
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type r = {
   x: v ;
-  y: int }[@@deriving brr]
+  y: int }[@@deriving (brr, (show { with_path = false }))]
+let rec pp_r :
+  Ppx_deriving_runtime.Format.formatter -> r -> Ppx_deriving_runtime.unit =
+  let __0 () = pp_v in
+  ((let open! ((Ppx_deriving_runtime)[@ocaml.warning "-A"]) in
+      fun fmt ->
+        fun x ->
+          Ppx_deriving_runtime.Format.fprintf fmt "@[<2>{ ";
+          ((Ppx_deriving_runtime.Format.fprintf fmt "@[%s =@ " "x";
+            ((__0 ()) fmt) x.x;
+            Ppx_deriving_runtime.Format.fprintf fmt "@]");
+           Ppx_deriving_runtime.Format.fprintf fmt ";@ ";
+           Ppx_deriving_runtime.Format.fprintf fmt "@[%s =@ " "y";
+           (Ppx_deriving_runtime.Format.fprintf fmt "%d") x.y;
+           Ppx_deriving_runtime.Format.fprintf fmt "@]");
+          Ppx_deriving_runtime.Format.fprintf fmt "@ }@]")
+    [@ocaml.warning "-A"])
+and show_r : r -> Ppx_deriving_runtime.string =
+  fun x -> Ppx_deriving_runtime.Format.asprintf "%a" pp_r x[@@ocaml.warning
+                                                             "-32"]
 include
   struct
     let _ = fun (_ : r) -> ()
     let jv_of_r { x; y } = Jv.obj [|("x", (jv_of_v x));("y", (Jv.of_int y))|]
     let _ = jv_of_r
+    let jv_to_r j =
+      { x = (jv_to_v (Jv.get j "x")); y = (Jv.to_int (Jv.get j "y")) }
+    let _ = jv_to_r
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type 'a t =
   | Nil 
-  | Cons of 'a * 'a t [@@deriving brr]
+  | Cons of 'a * 'a t [@@deriving (brr, (show { with_path = false }))]
+let rec pp :
+  'a .
+    (Ppx_deriving_runtime.Format.formatter -> 'a -> Ppx_deriving_runtime.unit)
+      ->
+      Ppx_deriving_runtime.Format.formatter ->
+        'a t -> Ppx_deriving_runtime.unit
+  =
+  let __0 () = pp in
+  ((let open! ((Ppx_deriving_runtime)[@ocaml.warning "-A"]) in
+      fun poly_a ->
+        fun fmt ->
+          function
+          | Nil -> Ppx_deriving_runtime.Format.pp_print_string fmt "Nil"
+          | Cons (a0, a1) ->
+              (Ppx_deriving_runtime.Format.fprintf fmt "(@[<2>Cons (@,";
+               ((poly_a fmt) a0;
+                Ppx_deriving_runtime.Format.fprintf fmt ",@ ";
+                ((__0 ()) (fun fmt -> poly_a fmt) fmt) a1);
+               Ppx_deriving_runtime.Format.fprintf fmt "@,))@]"))
+    [@ocaml.warning "-A"])
+and show :
+  'a .
+    (Ppx_deriving_runtime.Format.formatter -> 'a -> Ppx_deriving_runtime.unit)
+      -> 'a t -> Ppx_deriving_runtime.string
+  =
+  fun poly_a ->
+    fun x -> Ppx_deriving_runtime.Format.asprintf "%a" (pp poly_a) x[@@ocaml.warning
+                                                                    "-32"]
 include
   struct
     let _ = fun (_ : 'a t) -> ()
@@ -50,6 +130,15 @@ include
             Jv.Jarray.set a 2 ((jv_of_t jv_of_a) v1));
            a)
     let _ = jv_of_t
+    let rec jv_to_t jv_to_a t =
+      ((match Jv.to_string (Jv.Jarray.get t 0) with
+        | "Nil" -> Nil
+        | "Cons" ->
+            Cons
+              ((jv_to_a (Jv.Jarray.get t 1)),
+                (jv_to_t jv_to_a (Jv.Jarray.get t 2))))
+      [@warning "-8"])
+    let _ = jv_to_t
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type s1 =
   | S1 of int t [@@deriving brr]
@@ -64,6 +153,11 @@ include
            Jv.Jarray.set a 1 ((jv_of_t Jv.of_int) v0);
            a)
     let _ = jv_of_s1
+    let jv_to_s1 t =
+      ((match Jv.to_string (Jv.Jarray.get t 0) with
+        | "S1" -> S1 (jv_to_t Jv.to_int (Jv.Jarray.get t 1)))
+      [@warning "-8"])
+    let _ = jv_to_s1
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type 'a s =
   | S of 'a t [@@deriving brr]
@@ -78,13 +172,22 @@ include
            Jv.Jarray.set a 1 ((jv_of_t jv_of_a) v0);
            a)
     let _ = jv_of_s
+    let jv_to_s jv_to_a t =
+      ((match Jv.to_string (Jv.Jarray.get t 0) with
+        | "S" -> S (jv_to_t jv_to_a (Jv.Jarray.get t 1)))
+      [@warning "-8"])
+    let _ = jv_to_s
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 let () =
   let p x = Brr.Console.log [x] in
-  p (jv_of_r { x = (A ("hi", false)); y = 2 });
+  let data = { x = (A ("hi", false)); y = 2 } in
+  p (jv_of_r data);
   p (jv_of_r { x = (B 1.); y = 3 });
   p (jv_of_r { x = C; y = 4 });
   (let xs = Cons (1, Nil) in
    p (jv_of_t Jv.of_int xs);
    p (jv_of_s1 (S1 xs));
-   p (jv_of_s Jv.of_int (S xs)))
+   p (jv_of_s Jv.of_int (S xs));
+   (let rt = jv_to_t Jv.to_int (jv_of_t Jv.of_int xs) in
+    Format.printf "%a@." (pp Format.pp_print_int) rt;
+    (let rt1 = jv_to_r (jv_of_r data) in Format.printf "%a@." pp_r rt1)))

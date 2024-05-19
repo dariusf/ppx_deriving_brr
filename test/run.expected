@@ -4,3 +4,5 @@
 [ 'Cons', 1, [ 'Nil' ] ]
 [ 'S1', [ 'Cons', 1, [ 'Nil' ] ] ]
 [ 'S', [ 'Cons', 1, [ 'Nil' ] ] ]
+(Cons (1, Nil))
+{ x = (A ("hi", false)); y = 2 }

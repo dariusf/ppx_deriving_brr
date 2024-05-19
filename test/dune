@@ -19,7 +19,7 @@
  (name test)
  (libraries brr)
  (modes js)
- (preprocess (pps ppx_deriving_brr)))
+ (preprocess (pps ppx_deriving.std ppx_deriving_brr)))
 
 (rule
  (target run.result)

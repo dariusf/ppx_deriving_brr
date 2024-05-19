@@ -7,6 +7,8 @@ let rec foldr1 f xs =
 open Ppxlib
 module Ast = Ast_builder.Default
 
+let located ~loc e = { loc; txt = e }
+let lident ~loc i = { loc; txt = Lident i }
 let ppx_name = "brr"
 
 exception Failed of location * string
@@ -15,24 +17,33 @@ let error ~loc fmt = Format.ksprintf (fun s -> raise (Failed (loc, s))) fmt
 let error_expr ~loc msg = [%expr [%ocaml.error [%e Ast.estring ~loc msg]]]
 let error_str ~loc msg = [%str [%ocaml.error [%e Ast.estring ~loc msg]]]
 
-let rec jv_conversion_for loc (typ : core_type) =
+let rec jv_conversion_for loc dir (typ : core_type) =
+  let templ =
+    match dir with
+    | `Of -> Format.asprintf "jv_of_%s"
+    | `To -> Format.asprintf "jv_to_%s"
+  in
   match typ.ptyp_desc with
   | Ptyp_constr ({ txt = Lident name; loc = _ }, args) ->
-    (match (name, args) with
-    | "int", [] -> [%expr Jv.of_int]
-    | "string", [] -> [%expr Jv.of_string]
-    | "float", [] -> [%expr Jv.of_float]
-    | "bool", [] -> [%expr Jv.of_bool]
-    | _, _ ->
-      let fn = Ast.evar ~loc (Format.asprintf "jv_of_%s" name) in
+    (match (name, args, dir) with
+    | "int", [], `Of -> [%expr Jv.of_int]
+    | "int", [], `To -> [%expr Jv.to_int]
+    | "string", [], `Of -> [%expr Jv.of_string]
+    | "string", [], `To -> [%expr Jv.to_string]
+    | "float", [], `Of -> [%expr Jv.of_float]
+    | "float", [], `To -> [%expr Jv.to_float]
+    | "bool", [], `Of -> [%expr Jv.of_bool]
+    | "bool", [], `To -> [%expr Jv.to_bool]
+    | _ ->
+      let fn = Ast.evar ~loc (templ name) in
       let args =
-        List.map (jv_conversion_for loc) args
+        List.map (jv_conversion_for loc dir) args
         |> List.map (fun a -> (Nolabel, a))
       in
       Ast.pexp_apply ~loc fn args)
   | Ptyp_var name ->
     (* refer to a parameter *)
-    let fn = Ast.evar ~loc (Format.asprintf "jv_of_%s" name) in
+    let fn = Ast.evar ~loc (templ name) in
     fn
   | Ptyp_poly (_, _) -> failwith "poly"
   | Ptyp_any
@@ -66,134 +77,213 @@ let is_type_decl_recursive t1 =
   | Ptype_record _ -> false
   | Ptype_open | Ptype_abstract -> failwith "nyi"
 
-let generate_record loc is_rec type_params name fields =
-  (*
-       let jv_of_a {f1} =
-         Jv.obj [| "f1", jv_of_f1t f1 |]
-    *)
-  let param =
-    Ast.ppat_record ~loc
-      (List.map
-         (fun f ->
-           let name = f.pld_name.txt in
-           ({ loc; txt = Lident name }, Ast.pvar ~loc name))
-         fields)
-      Closed
-  in
-  let body =
-    [%expr
-      Jv.obj
-        [%e
-          Ast.pexp_array ~loc
-            (List.map
-               (fun f ->
-                 let name = f.pld_name.txt in
-                 let arg = Ast.evar ~loc name in
-                 Ast.pexp_tuple ~loc
-                   [
-                     Ast.estring ~loc name;
-                     [%expr [%e jv_conversion_for loc f.pld_type] [%e arg]];
-                   ])
-               fields)]]
-  in
-  (* the function which takes the value to be converted *)
-  let of_final_fn = Ast.pexp_fun ~loc Nolabel None param body in
+let make_binding_with_params loc is_rec name type_params templ final_fn_body =
   (* add printers for type parameters *)
-  let expr =
+  let fn_with_params =
     List.fold_right
-      (fun c t ->
-        Ast.pexp_fun ~loc Nolabel None
-          (Ast.pvar ~loc (Format.asprintf "jv_of_%s" c))
-          t)
-      type_params of_final_fn
+      (fun c t -> Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc (templ c)) t)
+      type_params final_fn_body
   in
-  [
+  let binding =
     Ast.pstr_value ~loc is_rec
       [
         Ast.value_binding ~loc
-          ~pat:(Ast.pvar ~loc (Format.asprintf "jv_of_%s" name))
-          ~expr;
-      ];
-  ]
+          ~pat:(Ast.pvar ~loc (templ name))
+          ~expr:fn_with_params;
+      ]
+  in
+  binding
+
+let generate_record loc is_rec type_params name fields =
+  let generate_of () =
+    (*
+      let jv_of_a {f1} =
+        Jv.obj [| "f1", jv_of_f1t f1 |]
+    *)
+    let param =
+      Ast.ppat_record ~loc
+        (List.map
+           (fun f ->
+             let name = f.pld_name.txt in
+             (lident ~loc name, Ast.pvar ~loc name))
+           fields)
+        Closed
+    in
+    let body =
+      [%expr
+        Jv.obj
+          [%e
+            Ast.pexp_array ~loc
+              (List.map
+                 (fun f ->
+                   let name = f.pld_name.txt in
+                   let arg = Ast.evar ~loc name in
+                   Ast.pexp_tuple ~loc
+                     [
+                       Ast.estring ~loc name;
+                       [%expr
+                         [%e jv_conversion_for loc `Of f.pld_type] [%e arg]];
+                     ])
+                 fields)]]
+    in
+    (* the function which takes the value to be converted *)
+    let final_fn_body = Ast.pexp_fun ~loc Nolabel None param body in
+    make_binding_with_params loc is_rec name type_params
+      (Format.asprintf "jv_of_%s")
+      final_fn_body
+  in
+  let generate_to () =
+    (*
+      let jv_to_a t =
+        { f1=jv_to_f1t (Jv.get t "f1") }
+    *)
+    let param = Ast.pvar ~loc "j" in
+    let body =
+      Ast.pexp_record ~loc
+        (List.map
+           (fun f ->
+             let name = f.pld_name.txt in
+             let typ = f.pld_type in
+             ( lident ~loc name,
+               Ast.pexp_apply ~loc
+                 (jv_conversion_for loc `To typ)
+                 [(Nolabel, [%expr Jv.get j [%e Ast.estring ~loc name]])] ))
+           fields)
+        None
+    in
+    (* the function which takes the value to be converted *)
+    let final_fn_body = Ast.pexp_fun ~loc Nolabel None param body in
+    make_binding_with_params loc is_rec name type_params
+      (Format.asprintf "jv_to_%s")
+      final_fn_body
+  in
+  [generate_of (); generate_to ()]
 
 let generate_variant loc is_rec type_params name cases =
-  (* let jv_of_a t =
-        match t with
-        | A x -> ["A", jv_of_xt x] *)
-  let body =
-    Ast.pexp_match ~loc [%expr t]
-      (List.map
-         (fun c ->
-           let name = c.pcd_name.txt in
-           let args =
-             match c.pcd_args with
-             | Pcstr_tuple ts ->
-               List.mapi
-                 (fun i _ta -> Ast.pvar ~loc (Format.asprintf "v%d" i))
-                 ts
-             | Pcstr_record _ -> failwith "nyi"
-           in
-           let rhs =
-             (* let a = Jv.Jarray.create 2 in
-                Jv.Jarray.set a 0 (jv_of_arg1t arg1);
-                Jv.Jarray.set a 1 (jv_of_arg2t arg2) *)
-             let len = Ast.eint ~loc (List.length args + 1) in
-             let sets =
+  (*
+    let jv_of_a t =
+      match t with
+      | A x -> ["A", jv_of_xt x]
+  *)
+  let generate_of () =
+    let body =
+      Ast.pexp_match ~loc [%expr t]
+        (List.map
+           (fun c ->
+             let name = c.pcd_name.txt in
+             let args =
                match c.pcd_args with
                | Pcstr_tuple ts ->
                  List.mapi
-                   (fun i typ ->
-                     let v =
-                       [%expr
-                         [%e jv_conversion_for loc typ]
-                           [%e Ast.evar ~loc (Format.asprintf "v%d" i)]]
-                     in
-                     let idx = Ast.eint ~loc (i + 1) in
-                     [%expr Jv.Jarray.set a [%e idx] [%e v]])
+                   (fun i _ta -> Ast.pvar ~loc (Format.asprintf "v%d" i))
                    ts
                | Pcstr_record _ -> failwith "nyi"
              in
-             let sets =
-               match sets with
-               | [] -> Ast.eunit ~loc
-               | _ -> foldr1 (fun c t -> Ast.pexp_sequence ~loc c t) sets
+             let rhs =
+               (*
+                 let a = Jv.Jarray.create 2 in
+                 Jv.Jarray.set a 0 (jv_of_arg1t arg1);
+                 Jv.Jarray.set a 1 (jv_of_arg2t arg2)
+               *)
+               let len = Ast.eint ~loc (List.length args + 1) in
+               let sets =
+                 match c.pcd_args with
+                 | Pcstr_tuple ts ->
+                   List.mapi
+                     (fun i typ ->
+                       let v =
+                         [%expr
+                           [%e jv_conversion_for loc `Of typ]
+                             [%e Ast.evar ~loc (Format.asprintf "v%d" i)]]
+                       in
+                       let idx = Ast.eint ~loc (i + 1) in
+                       [%expr Jv.Jarray.set a [%e idx] [%e v]])
+                     ts
+                 | Pcstr_record _ -> failwith "nyi"
+               in
+               let sets =
+                 match sets with
+                 | [] -> Ast.eunit ~loc
+                 | _ -> foldr1 (fun c t -> Ast.pexp_sequence ~loc c t) sets
+               in
+               let tag = [%expr Jv.of_string [%e Ast.estring ~loc name]] in
+               [%expr
+                 let a = Jv.Jarray.create [%e len] in
+                 Jv.Jarray.set a 0 [%e tag];
+                 [%e sets];
+                 a]
              in
-             let tag = [%expr Jv.of_string [%e Ast.estring ~loc name]] in
-             [%expr
-               let a = Jv.Jarray.create [%e len] in
-               Jv.Jarray.set a 0 [%e tag];
-               [%e sets];
-               a]
-           in
-
-           Ast.case
-             ~lhs:
-               (Ast.ppat_construct ~loc { loc; txt = Lident name }
-                  (match args with
-                  | [] -> None
-                  | _ -> Some (Ast.ppat_tuple ~loc args)))
-             ~guard:None ~rhs)
-         cases)
+             Ast.case
+               ~lhs:
+                 (Ast.ppat_construct ~loc (lident ~loc name)
+                    (match args with
+                    | [] -> None
+                    | _ -> Some (Ast.ppat_tuple ~loc args)))
+               ~guard:None ~rhs)
+           cases)
+    in
+    (* final function which acts on thing to be converted *)
+    let of_final_fn = Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body in
+    make_binding_with_params loc is_rec name type_params
+      (Format.asprintf "jv_of_%s")
+      of_final_fn
   in
-  (* final function which acts on thing to be converted *)
-  let of_final_fn = Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body in
-  (* add printers for type parameters *)
-  let expr =
-    List.fold_right
-      (fun c t ->
-        Ast.pexp_fun ~loc Nolabel None
-          (Ast.pvar ~loc (Format.asprintf "jv_of_%s" c))
-          t)
-      type_params of_final_fn
+  (*
+    let jv_to_a j =
+      match t with
+      | ["A"; x] -> A (jv_of_xt x)
+  *)
+  let generate_to () =
+    let body =
+      Ast.pexp_match ~loc
+        [%expr Jv.to_string (Jv.Jarray.get t 0)]
+        (List.map
+           (fun c ->
+             let name = c.pcd_name.txt in
+             let args =
+               match c.pcd_args with
+               | Pcstr_tuple ts ->
+                 List.mapi
+                   (fun i ta ->
+                     Ast.pexp_apply ~loc
+                       (jv_conversion_for loc `To ta)
+                       [
+                         ( Nolabel,
+                           [%expr Jv.Jarray.get t [%e Ast.eint ~loc (i + 1)]] );
+                       ])
+                   ts
+               | Pcstr_record _ -> failwith "nyi"
+             in
+             let rhs =
+               Ast.pexp_construct ~loc (lident ~loc name)
+                 (match args with
+                 | [] -> None
+                 | [a] -> Some a
+                 | _ -> Some (Ast.pexp_tuple ~loc args))
+             in
+             Ast.case
+               ~lhs:(Ast.ppat_constant ~loc (Pconst_string (name, loc, None)))
+               ~guard:None ~rhs)
+           cases)
+    in
+    (* silence inexhaustiveness warning *)
+    let body =
+      {
+        body with
+        pexp_attributes =
+          [
+            Ast.attribute ~loc ~name:(located ~loc "warning")
+              ~payload:(PStr [Ast.pstr_eval ~loc (Ast.estring ~loc "-8") []]);
+          ];
+      }
+    in
+    (* final function which acts on thing to be converted *)
+    let of_final_fn = Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body in
+    make_binding_with_params loc is_rec name type_params
+      (Format.asprintf "jv_to_%s")
+      of_final_fn
   in
-  [
-    Ast.pstr_value ~loc is_rec
-      [
-        Ast.value_binding ~loc
-          ~pat:(Ast.pvar ~loc (Format.asprintf "jv_of_%s" name))
-          ~expr;
-      ];
-  ]
+  [generate_of (); generate_to ()]
 
 let generate_type_decl tdecl =
   let td =
