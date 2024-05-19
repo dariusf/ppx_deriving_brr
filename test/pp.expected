@@ -191,3 +191,16 @@ let () =
    (let rt = of_jv Jv.to_int (to_jv Jv.of_int xs) in
     Format.printf "%a@." (pp Format.pp_print_int) rt;
     (let rt1 = r_of_jv (r_to_jv data) in Format.printf "%a@." pp_r rt1)))
+let rec append a b =
+  match a with | Nil -> b | Cons (x, xs) -> Cons (x, (append xs b))
+let () =
+  Jv.set Jv.global "Example"
+    (Jv.obj
+       [|("concat",
+           (Jv.callback ~arity:2
+              (fun v0 ->
+                 fun v1 ->
+                   to_jv Jv.of_int
+                     (append (of_jv Jv.to_int v0) (of_jv Jv.to_int v1)))))|])
+let eval s = Brr.Console.log [Jv.call Jv.global "eval" [|(Jv.of_string s)|]]
+let () = eval {|Example.concat(['Cons', 1, ['Nil']], ['Cons', 2, ['Nil']])|}

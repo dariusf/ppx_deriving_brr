@@ -32,3 +32,13 @@ let () =
   Format.printf "%a@." (pp Format.pp_print_int) rt;
   let rt1 = r_of_jv (r_to_jv data) in
   Format.printf "%a@." pp_r rt1
+
+let rec append a b =
+  match a with Nil -> b | Cons (x, xs) -> Cons (x, append xs b)
+
+module%brr Example = struct
+  let concat : int t -> int t -> int t = append
+end
+
+let eval s = Brr.Console.log [Jv.call Jv.global "eval" [| Jv.of_string s |]]
+let () = eval {|Example.concat(['Cons', 1, ['Nil']], ['Cons', 2, ['Nil']])|}
