@@ -37,6 +37,9 @@ let () =
   p (s2_to_jv [1; 2; 3]);
   p (s3_to_jv Jv.of_int [1; 2; 3])
 
+let subst v s1 =
+  match v with A (s, b) when s = s1 -> A (s1, b) | A _ | C | B _ -> v
+
 let rec append a b =
   match a with Nil -> b | Cons (x, xs) -> Cons (x, append xs b)
 
@@ -44,6 +47,7 @@ let rec append a b =
    match a with Nil -> Nil | Cons (x, xs) -> Cons (f x, map_int f xs) *)
 
 module%brr Example = struct
+  let subst : v -> string -> v = subst
   let concat : int t -> int t -> int t = append
   (* let map : (int -> int) -> int t -> int t = map_int *)
 end

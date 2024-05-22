@@ -212,12 +212,18 @@ let () =
      Format.printf "%a@." pp_r rt1;
      p (s2_to_jv [1; 2; 3]);
      p (s3_to_jv Jv.of_int [1; 2; 3]))))
+let subst v s1 =
+  match v with | A (s, b) when s = s1 -> A (s1, b) | A _ | C | B _ -> v
 let rec append a b =
   match a with | Nil -> b | Cons (x, xs) -> Cons (x, (append xs b))
 let () =
   Jv.set Jv.global "Example"
     (Jv.obj
-       [|("concat",
+       [|("subst",
+           (Jv.callback ~arity:2
+              (fun v0 ->
+                 fun v1 -> v_to_jv (subst (v_of_jv v0) (Jv.to_string v1)))));
+         ("concat",
            (Jv.callback ~arity:2
               (fun v0 ->
                  fun v1 ->
