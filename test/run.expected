@@ -6,4 +6,6 @@
 [ 'S', [ 'Cons', 1, [ 'Nil' ] ] ]
 (Cons (1, Nil))
 { x = (A ("hi", false)); y = 2 }
+[ 1, 2, 3 ]
+[ 1, 2, 3 ]
 [ 'Cons', 1, [ 'Cons', 2, [ 'Nil' ] ] ]

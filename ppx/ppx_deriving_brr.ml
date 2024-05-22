@@ -36,6 +36,10 @@ module JvConv = struct
       | "float", [], `OfJv -> [%expr Jv.to_float]
       | "bool", [], `ToJv -> [%expr Jv.of_bool]
       | "bool", [], `OfJv -> [%expr Jv.to_bool]
+      | "list", [a], `ToJv ->
+        [%expr Jv.of_list [%e jv_conversion_for loc dir a]]
+      | "list", [a], `OfJv ->
+        [%expr Jv.to_list [%e jv_conversion_for loc dir a]]
       | _ ->
         let fn =
           if String.equal name "t" then
@@ -81,8 +85,8 @@ module JvConv = struct
           | Pcstr_tuple ts -> List.exists refers_to_name ts
           | Pcstr_record _ -> failwith "nyi")
         cs
-    | Ptype_record _ -> false
-    | Ptype_open | Ptype_abstract -> failwith "nyi"
+    | Ptype_abstract | Ptype_record _ -> false
+    | Ptype_open -> failwith "nyi"
 
   let make_binding_with_params loc is_rec name type_params templ final_fn_body =
     (* add printers for type parameters *)
@@ -173,7 +177,7 @@ module JvConv = struct
     let jv_of_a t =
       match t with
       | A x -> ["A", jv_of_xt x]
-  *)
+    *)
     let generate_of () =
       let body =
         Ast.pexp_match ~loc [%expr t]
@@ -301,6 +305,32 @@ module JvConv = struct
     in
     [generate_of (); generate_to ()]
 
+  let generate_abstract loc is_rec type_params name manifest =
+    match manifest with
+    | None -> error ~loc "cannot generate for abstract type"
+    | Some typ ->
+      let generate_of () =
+        let body = [%expr [%e jv_conversion_for loc `ToJv typ] t] in
+        let of_final_fn =
+          Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body
+        in
+        make_binding_with_params loc is_rec name type_params
+          (fun t ->
+            match t with "t" -> "to_jv" | _ -> Format.asprintf "%s_to_jv" t)
+          of_final_fn
+      in
+      let generate_to () =
+        let body = [%expr [%e jv_conversion_for loc `OfJv typ] t] in
+        let of_final_fn =
+          Ast.pexp_fun ~loc Nolabel None (Ast.pvar ~loc "t") body
+        in
+        make_binding_with_params loc is_rec name type_params
+          (fun t ->
+            match t with "t" -> "of_jv" | _ -> Format.asprintf "%s_of_jv" t)
+          of_final_fn
+      in
+      [generate_of (); generate_to ()]
+
   let generate_type_decl tdecl =
     let td =
       (* TODO mutually recursive types *)
@@ -324,12 +354,8 @@ module JvConv = struct
     | Ptype_record fields -> generate_record loc is_rec type_params name fields
     | Ptype_variant cases -> generate_variant loc is_rec type_params name cases
     | Ptype_abstract ->
-      (* begin
-           match td.ptype_manifest with
-           | None -> error ~loc "cannot generate for abstract type"
-           | Some typ -> [generate_printer_type ~loc name typ]
-         end *)
-      []
+      (* type aliases go in here too *)
+      generate_abstract loc is_rec type_params name td.ptype_manifest
     | Ptype_open -> failwith "open"
 
   let str_gen ~loc:_ ~path:_ (_rec, t) =

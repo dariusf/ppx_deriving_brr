@@ -17,6 +17,8 @@ type 'a t =
 
 type s1 = S1 of int t [@@deriving brr]
 type 'a s = S of 'a t [@@deriving brr]
+type s2 = int list [@@deriving brr]
+type 'a s3 = 'a list [@@deriving brr]
 
 let () =
   let p x = Brr.Console.log [x] in
@@ -31,7 +33,9 @@ let () =
   let rt = of_jv Jv.to_int (to_jv Jv.of_int xs) in
   Format.printf "%a@." (pp Format.pp_print_int) rt;
   let rt1 = r_of_jv (r_to_jv data) in
-  Format.printf "%a@." pp_r rt1
+  Format.printf "%a@." pp_r rt1;
+  p (s2_to_jv [1; 2; 3]);
+  p (s3_to_jv Jv.of_int [1; 2; 3])
 
 let rec append a b =
   match a with Nil -> b | Cons (x, xs) -> Cons (x, append xs b)
