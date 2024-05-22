@@ -19,6 +19,21 @@ let error_str ~loc msg = [%str [%ocaml.error [%e Ast.estring ~loc msg]]]
 let error_stri ~loc msg = [%stri [%ocaml.error [%e Ast.estring ~loc msg]]]
 
 module JvConv = struct
+  let rec arrow_to_args ty =
+    match ty.ptyp_desc with
+    | Ptyp_arrow (_, a, b) ->
+      let r, ret = arrow_to_args b in
+      (a :: r, ret)
+    | Ptyp_any | Ptyp_var _ | Ptyp_tuple _
+    | Ptyp_constr (_, _)
+    | Ptyp_object (_, _)
+    | Ptyp_class (_, _)
+    | Ptyp_alias (_, _)
+    | Ptyp_variant (_, _, _)
+    | Ptyp_poly (_, _)
+    | Ptyp_package _ | Ptyp_extension _ ->
+      ([], ty)
+
   let rec jv_conversion_for loc dir (typ : core_type) =
     let templ =
       match dir with
@@ -55,10 +70,53 @@ module JvConv = struct
       (* refer to a parameter *)
       let fn = Ast.evar ~loc (templ name) in
       fn
-    | Ptyp_poly (_, _) -> failwith "poly"
-    | Ptyp_any
-    | Ptyp_arrow (_, _, _)
-    | Ptyp_tuple _
+    | Ptyp_arrow (_, _a, _b) when false ->
+      (* higher-order functions currently don't work, as the translation scheme is no longer compositional *)
+      let args, ret = arrow_to_args typ in
+      let arity = List.length args in
+      let invoc =
+        Ast.eapply ~loc
+          (jv_conversion_for loc `ToJv ret)
+          [
+            Ast.eapply ~loc [%expr f]
+              (List.mapi
+                 (fun i at ->
+                   Ast.eapply ~loc
+                     (jv_conversion_for loc `OfJv at)
+                     [Ast.evar ~loc (Format.asprintf "v%d" i)])
+                 args);
+          ]
+      in
+
+      let fn =
+        List.fold_right
+          (fun (i, _c) t ->
+            Ast.pexp_fun ~loc Nolabel None
+              (Ast.pvar ~loc (Format.asprintf "v%d" i))
+              t)
+          (List.mapi (fun i a -> (i, a)) args)
+          invoc
+      in
+      let callback =
+        [%expr Jv.callback ~arity:[%e Ast.eint ~loc arity] [%e fn]]
+      in
+      (* have to eta-expand callback to convert a js function into an ocaml one *)
+      let eta =
+        let fnc =
+          List.fold_right
+            (fun (i, _c) t ->
+              Ast.pexp_fun ~loc Nolabel None
+                (Ast.pvar ~loc (Format.asprintf "p%d" i))
+                t)
+            (List.mapi (fun i a -> (i, a)) args)
+            callback
+        in
+        Ast.eapply ~loc fnc
+          (List.mapi (fun i _ -> Ast.evar ~loc (Format.asprintf "p%d" i)) args)
+      in
+      [%expr fun f -> [%e eta]]
+    | Ptyp_arrow _ | Ptyp_any | Ptyp_tuple _
+    | Ptyp_poly (_, _)
     | Ptyp_constr (_, _)
     | Ptyp_object (_, _)
     | Ptyp_class (_, _)
@@ -66,7 +124,8 @@ module JvConv = struct
     | Ptyp_variant (_, _, _)
     | Ptyp_package _ | Ptyp_extension _ ->
       failwith
-        (Format.asprintf "unknown kind of type %a" Pprintast.core_type typ)
+        (Format.asprintf "jv_conversion_for: unknown kind of type %a"
+           Pprintast.core_type typ)
 
   let is_type_decl_recursive t1 =
     let name = t1.ptype_name.txt in
@@ -341,13 +400,9 @@ module JvConv = struct
     in
     let { loc; txt = name } = td.ptype_name in
     let type_params =
-      List.map
+      List.filter_map
         (fun (p, _) ->
-          match p.ptyp_desc with
-          | Ptyp_var a -> a
-          | _ ->
-            failwith
-              (Format.asprintf "unknown kind of type %a" Pprintast.core_type p))
+          match p.ptyp_desc with Ptyp_var a -> Some a | _ -> None)
         td.ptype_params
     in
     match td.ptype_kind with
@@ -383,21 +438,6 @@ module JvConv = struct
 end
 
 module FFI = struct
-  let rec arrow_to_args ty =
-    match ty.ptyp_desc with
-    | Ptyp_arrow (_, a, b) ->
-      let r, ret = arrow_to_args b in
-      (a :: r, ret)
-    | Ptyp_any | Ptyp_var _ | Ptyp_tuple _
-    | Ptyp_constr (_, _)
-    | Ptyp_object (_, _)
-    | Ptyp_class (_, _)
-    | Ptyp_alias (_, _)
-    | Ptyp_variant (_, _, _)
-    | Ptyp_poly (_, _)
-    | Ptyp_package _ | Ptyp_extension _ ->
-      ([], ty)
-
   let rec cannot_contain_variables t =
     match t.ptyp_desc with
     | Ptyp_constr (_name, args) -> List.iter cannot_contain_variables args
@@ -437,7 +477,7 @@ module FFI = struct
           let items =
             List.map
               (fun (simple_name, ty, fn_name) ->
-                let args, ret = arrow_to_args ty in
+                let args, ret = JvConv.arrow_to_args ty in
                 let arity = List.length args in
                 let invoc =
                   Ast.eapply ~loc

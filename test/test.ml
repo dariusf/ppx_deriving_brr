@@ -40,8 +40,12 @@ let () =
 let rec append a b =
   match a with Nil -> b | Cons (x, xs) -> Cons (x, append xs b)
 
+(* let rec map_int f a =
+   match a with Nil -> Nil | Cons (x, xs) -> Cons (f x, map_int f xs) *)
+
 module%brr Example = struct
   let concat : int t -> int t -> int t = append
+  (* let map : (int -> int) -> int t -> int t = map_int *)
 end
 
 let eval s = Brr.Console.log [Jv.call Jv.global "eval" [| Jv.of_string s |]]
